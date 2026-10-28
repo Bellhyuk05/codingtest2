@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>도서관 대출 시스템</title>
+<style>
+  :root {
+    --bg: #f5f3ee; --card: #ffffff; --text: #1f2328; --muted: #6b6f76; --line: #dcd8cf;
+    --accent: #2f5d50; --ok-bg: #e3f4e8; --ok: #1b6b34; --bad-bg: #fde4e1; --bad: #b3261e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17191c; --card: #212428; --text: #e8e6e1; --muted: #9aa0a6; --line: #363a40;
+      --accent: #7fbfa9; --ok-bg: #173a24; --ok: #8be0a6; --bad-bg: #4a1c19; --bad: #ff9c92;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font-family: system-ui, -apple-system, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; font-size: .95rem; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+  h2 { font-size: 1.1rem; margin: 0 0 12px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  @media (max-width: 480px) { .row { grid-template-columns: 1fr; } }
+  label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 4px; }
+  input, select { width: 100%; padding: 10px; font-size: 1rem; border: 1px solid var(--line); border-radius: 8px;
+                  background: var(--bg); color: var(--text); }
+  .btns { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  button { padding: 10px 18px; font-size: 1rem; border-radius: 8px; border: 1px solid var(--accent);
+           background: var(--accent); color: var(--card); cursor: pointer; font-weight: 600; }
+  button.ghost { background: transparent; color: var(--accent); }
+  .result { margin-top: 14px; padding: 14px; border-radius: 10px; font-size: 1.15rem; font-weight: 700; display: none; }
+  .result.ok { display: block; background: var(--ok-bg); color: var(--ok); }
+  .result.bad { display: block; background: var(--bad-bg); color: var(--bad); font-size: 1.5rem; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); }
+  th { font-size: .85rem; color: var(--muted); font-weight: 600; }
+  .empty { color: var(--muted); margin-top: 12px; }
+  .reset { text-align: right; }
+</style>
+</head>
+<body>
+<main>
+  <h1>📚 도서관 대출 시스템</h1>
+  <p class="sub">책: B001 ~ B005 · 대출 기간 14일 · 날짜는 "며칠째"(1 이상 정수)</p>
+
+  <section class="card">
+    <h2>대출 · 반납</h2>
+    <div class="row">
+      <div><label for="book">책 번호</label><input id="book" placeholder="B001" autocomplete="off"></div>
+      <div><label for="name">이름</label><input id="name" placeholder="김민수" autocomplete="off"></div>
+      <div><label for="day">며칠째</label><input id="day" placeholder="1" inputmode="numeric" autocomplete="off"></div>
+    </div>
+    <div class="btns">
+      <button id="borrowBtn">대출</button>
+      <button id="returnBtn" class="ghost">반납</button>
+    </div>
+    <div id="result" class="result" role="status" aria-live="polite"></div>
+  </section>
+
+  <section class="card">
+    <h2>대출 목록</h2>
+    <div class="row" style="grid-template-columns: 1fr auto;">
+      <div><label for="listName">이름</label><input id="listName" placeholder="김민수" autocomplete="off"></div>
+      <div style="align-self: end;"><button id="listBtn">목록 보기</button></div>
+    </div>
+    <div id="list"></div>
+  </section>
+
+  <div class="reset"><button id="resetBtn" class="ghost">처음 상태로 초기화</button></div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+function show(ok, text) {
+  const el = $("result");
+  el.className = "result " + (ok ? "ok" : "bad");
+  el.textContent = text;
+}
+
+async function post(url, body) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+  return res.json();
+}
+
+function fields() {
+  return { book_id: $("book").value, name: $("name").value, day: $("day").value };
+}
+
+$("borrowBtn").onclick = async () => {
+  const f = fields();
+  try {
+    const r = await post("/api/borrow", f);
+    if (r.ok) show(true, `✅ 대출 성공 — ${f.name}, ${f.book_id} (${f.day}일째)`);
+    else show(false, "❌ 대출 실패");
+  } catch (e) { show(false, "❌ 서버 연결 실패"); }
+};
+
+$("returnBtn").onclick = async () => {
+  const f = fields();
+  try {
+    const r = await post("/api/return", f);
+    if (r.ok) show(true, `✅ 반납 성공 — 연체 ${r.overdue}일`);
+    else show(false, "❌ 반납 실패");
+  } catch (e) { show(false, "❌ 서버 연결 실패"); }
+};
+
+$("listBtn").onclick = async () => {
+  const name = $("listName").value;
+  const box = $("list");
+  try {
+    const r = await (await fetch("/api/loans?name=" + encodeURIComponent(name))).json();
+    box.replaceChildren();
+    if (r.loans.length === 0) {
+      const p = document.createElement("p");
+      p.className = "empty";
+      p.textContent = "빌린 책이 없습니다.";
+      box.append(p);
+      return;
+    }
+    const table = document.createElement("table");
+    table.innerHTML = "<thead><tr><th>책 번호</th><th>반납 기한</th></tr></thead>";
+    const tbody = document.createElement("tbody");
+    for (const l of r.loans) {
+      const tr = document.createElement("tr");
+      const a = document.createElement("td"); a.textContent = l.book_id;
+      const b = document.createElement("td"); b.textContent = `${l.due}일째까지`;
+      tr.append(a, b);
+      tbody.append(tr);
+    }
+    table.append(tbody);
+    box.append(table);
+  } catch (e) { box.textContent = "서버 연결 실패"; }
+};
+
+$("resetBtn").onclick = async () => {
+  if (!confirm("모든 대출 기록을 지우고 처음 상태로 돌아갈까요?")) return;
+  await post("/api/reset");
+  show(true, "처음 상태로 초기화했습니다.");
+  $("list").replaceChildren();
+};
+</script>
+</body>
+</html>

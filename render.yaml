@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: library-loan
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    # 워커 1개: 대출 기록을 서버 메모리 하나에 기억하기 위해
+    startCommand: gunicorn app:app --workers 1 --threads 4 --bind 0.0.0.0:$PORT
